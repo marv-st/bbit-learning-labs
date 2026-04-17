@@ -31,37 +31,28 @@ class mqProducer(producerInterface):
         #Create the exchange if not already present
         self.m_exchange = 'RMQ Labs'
         self.m_channel.exchange_declare(self.m_exchange)
-        
-    def startPublishing(self):
-        if self.m_run.is_set():
-            print("Publishing thread started. No-op")
-            return
+   
+   #Build our connection to the RMQ Connection.
+#The AMPQ_URL is a string which tells pika the package the URL of our AMPQ service in this scenario RabbitMQ.
+conParams = pika.URLParameters(os.environ['AMQP_URL'])
+connection = pika.BlockingConnection(parameters=conParams)
+channel = connection.channel()
+channel.exchange_declare('Test Exchange')
 
-        #Turn on our threading flag & start a thread which runs our publishing loop
-        self.m_run.set()
-        self.m_pool.submit(self.pubLoop)
+#We can then publish data to that exchange using the basic_publish method
+channel.basic_publish('Test Exchange', 'Test_route', 'Hi',...)
 
-    def stopPublishing(self):
-        self.m_run.clear()
-        print("Attempting to join pub thread")
-        self.m_pool.shutdown()
+# We'll first set up the connection and channel
+connection = pika.BlockingConnection(
+    pika.ConnectionParameters(host='localhost'))
+channel = connection.channel()
 
-    def pubLoop(self):
-        while self.m_run.is_set():
-            if self.m_pub_producer:
-                data = self.m_pub_producer()
-            else:
-                data = f"The current time is {time.time()} in epoch time. Routing key is {self.m_routing_key}"
-            
-            print(f"Submitting data message {data}")
-            self.m_channel.basic_publish(self.m_exchange,
-                self.m_routing_key,
-                data,
-                pika.BasicProperties(content_type='text/plain',
-                    delivery_mode=pika.DeliveryMode.Transient))
-            time.sleep(self.m_pub_delay)
+# Declare the topic exchange
+channel.exchange_declare(exchange='topic_logs', exchange_type='topic')
 
-testObj = mqProducer("Test_Key", 1, None)
-testObj.startPublishing()
-time.sleep(40)
-testObj.stopPublishing()
+# Set the routing key and publish a message with that topic exchange:
+routing_key = sys.argv[1] if len(sys.argv) > 2 else 'anonymous.info'
+message = ' '.join(sys.argv[2:]) or 'Hello World!'
+channel.basic_publish(
+    exchange='topic_logs', routing_key=routing_key, body=message)
+print(f" [x] Sent {routing_key}:{message}")
